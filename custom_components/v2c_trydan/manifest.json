@@ -7,11 +7,11 @@
   ],
   "config_flow": true,
   "dependencies": [],
-  "documentation": "",
+  "documentation": "https://github.com/an0Nym0us63/v2c-trydan-plus-ha",
   "homekit": {},
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "",
+  "issue_tracker": "https://github.com/an0Nym0us63/v2c-trydan-plus-ha/issues",
   "quality_scale": "internal",
   "requirements": [
     "aiohttp>=3.8.0",

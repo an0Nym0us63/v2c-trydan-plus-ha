@@ -60,132 +60,153 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    async def set_min_intensity(call: ServiceCall):
-        #_LOGGER.debug("min_intensity service called")
-        min_intensity = call.data.get("min_intensity")
-        try:
-            min_intensity = int(min_intensity)
-            if 6 <= min_intensity <= 32:
-                #_LOGGER.debug(f"Valid min_intensity: {min_intensity}")
-                await async_set_min_intensity(hass, coordinator.ip_address, min_intensity)
-            else:
-                _LOGGER.error("min_intensity must be between 6 and 32")
-        except ValueError:
-            _LOGGER.error(f"Invalid min_intensity: {min_intensity}. Must be an integer.")
-
-    async def async_set_dynamic_power_mode(call: ServiceCall):
-        dynamic_power_mode = call.data.get("DynamicPowerMode")
-        try:
-            dynamic_power_mode = int(dynamic_power_mode)
-            if 0 <= dynamic_power_mode <= 5:
-                #_LOGGER.debug(f"Valid dynamic_power_mode: {dynamic_power_mode}")
-                await async_set_dynamic_power_mode(hass, coordinator.ip_address, dynamic_power_mode)
-            else:
-                _LOGGER.error("DynamicPowerMode must be between 0 and 5")
-        except ValueError:
-            _LOGGER.error(f"Invalid dynamic_power_mode: {dynamic_power_mode}. Must be an integer.")
-
-    async def set_max_intensity(call):
-        max_intensity = call.data["max_intensity"]
-        try:
-            max_intensity = int(max_intensity)
-            if 6 <= max_intensity <= 32:
-                #_LOGGER.debug(f"Valid max_intensity: {max_intensity}")
-                await async_set_max_intensity(hass, coordinator.ip_address, max_intensity)
-            else:
-                _LOGGER.error("max_intensity must be between 6 y 32")
-        except ValueError:
-            _LOGGER.error(f"Invalid max_intensity: {max_intensity}. Must be an integer.")
-
-    async def set_intensity(call):
-        intensity = call.data["intensity"]
-        try:
-            intensity = int(intensity)
-            if 6 <= intensity <= 32:
-                #_LOGGER.debug(f"Valid intensity: {intensity}")
-                await async_set_intensity(hass, coordinator.ip_address, intensity)
-            else:
-                _LOGGER.error("intensity must be between 6 y 32")
-        except ValueError:
-            _LOGGER.error(f"Invalid intensity: {intensity}. Must be an integer.")
-
-    async def set_min_intensity_slider(call):
-        min_intensity = call.data.get("v2c_min_intensity")
-        #_LOGGER.debug(f"Received call to set_min_intensity_slider with {min_intensity}")
-        if min_intensity is not None:
-            try:
-                min_intensity = int(min_intensity)
-                if 6 <= min_intensity <= 32:
-                    if entry:
-                        ip_address = coordinator.ip_address
-                        #_LOGGER.debug(f"Calling async_set_min_intensity with IP: {ip_address} and min_intensity: {min_intensity}")
-                        await async_set_min_intensity(hass, ip_address, min_intensity)
-                    else:
-                        _LOGGER.error("Entry data not found for setting min_intensity_slider")
-                else:
-                    _LOGGER.error("v2c_min_intensity must be between 6 y 32")
-            except ValueError:
-                _LOGGER.error(f"Invalid v2c_min_intensity: {min_intensity}. Must be an integer.")
-        else:
-            _LOGGER.error("v2c_min_intensity not provided")
-
-    async def set_dynamic_power_mode_slider(call):
-        dynamic_power_mode = call.data.get("v2c_dynamic_power_mode")
-        #_LOGGER.debug(f"Received call to set_dynamic_power_mode_slider with {dynamic_power_mode}")
-        if dynamic_power_mode is not None:
-            try:
-                dynamic_power_mode = int(dynamic_power_mode)
-                if 0 <= dynamic_power_mode <= 5:
-                    if entry:
-                        ip_address = coordinator.ip_address
-                        #_LOGGER.debug(f"Calling async_set_dynamic_power_mode with IP: {ip_address} and dynamic_power_mode: {dynamic_power_mode}")
-                        await async_set_dynamic_power_mode(hass, coordinator.ip_address, dynamic_power_mode)
-                    else:
-                        _LOGGER.error("Entry data not found for setting dynamic_power_mode_slider")
-                else:
-                    _LOGGER.error("v2c_dynamic_power_mode must be between 0 and 5")
-            except ValueError:
-                _LOGGER.error(f"Invalid v2c_dynamic_power_mode: {dynamic_power_mode}. Must be an integer.")
-        else:
-            _LOGGER.error("v2c_dynamic_power_mode not provided")
-
-    async def set_max_intensity_slider(call):
-        max_intensity = call.data.get("v2c_max_intensity")
-        #_LOGGER.debug(f"Received call to set_max_intensity_slider with {max_intensity}")
-        if max_intensity is not None:
-            try:
-                max_intensity = int(max_intensity)
-                if 6 <= max_intensity <= 32:
-                    if entry:
-                        ip_address = coordinator.ip_address
-                        #_LOGGER.debug(f"Calling async_set_max_intensity with IP: {ip_address} and max_intensity: {max_intensity}")
-                        await async_set_max_intensity(hass, coordinator.ip_address, max_intensity)
-                    else:
-                        _LOGGER.error("Entry data not found for setting max_intensity_slider")
-                else:
-                    _LOGGER.error("v2c_max_intensity must be between 6 y 32")
-            except ValueError:
-                _LOGGER.error(f"Invalid v2c_max_intensity: {max_intensity}. Must be an integer.")
-        else:
-            _LOGGER.error("v2c_max_intensity not provided")
-
-    hass.services.async_register(DOMAIN, "set_min_intensity", set_min_intensity)
-    hass.services.async_register(DOMAIN, "set_max_intensity", set_max_intensity)
-    hass.services.async_register(DOMAIN, "set_dynamic_power_mode", async_set_dynamic_power_mode)
-    hass.services.async_register(DOMAIN, "set_intensity", set_intensity)
-    hass.services.async_register(DOMAIN, "set_min_intensity_slider", set_min_intensity_slider)
-    hass.services.async_register(DOMAIN, "set_max_intensity_slider", set_max_intensity_slider)
-    hass.services.async_register(DOMAIN, "set_dynamic_power_mode_slider", set_dynamic_power_mode_slider)
+    # Register services once (multiple entries reuse the same handlers).
+    _register_services(hass)
 
     return True
+
+
+_SERVICE_NAMES = (
+    "set_min_intensity",
+    "set_max_intensity",
+    "set_intensity",
+    "set_dynamic_power_mode",
+    "set_min_intensity_slider",
+    "set_max_intensity_slider",
+    "set_dynamic_power_mode_slider",
+)
+
+
+def _first_coordinator(hass: HomeAssistant):
+    """Return any coordinator (first entry). Suffisant tant qu'on a 1 seul device."""
+    data = hass.data.get(DOMAIN, {})
+    for coord in data.values():
+        if hasattr(coord, "ip_address"):
+            return coord
+    return None
+
+
+def _register_services(hass: HomeAssistant) -> None:
+    """Register integration services (idempotent)."""
+    if hass.services.has_service(DOMAIN, "set_min_intensity"):
+        return
+
+    async def _svc_set_min_intensity(call: ServiceCall):
+        coord = _first_coordinator(hass)
+        if coord is None:
+            return
+        try:
+            value = int(call.data.get("min_intensity"))
+        except (TypeError, ValueError):
+            _LOGGER.error("min_intensity must be an integer")
+            return
+        if not 6 <= value <= 32:
+            _LOGGER.error("min_intensity must be between 6 and 32")
+            return
+        await async_set_min_intensity(hass, coord.ip_address, value)
+
+    async def _svc_set_max_intensity(call: ServiceCall):
+        coord = _first_coordinator(hass)
+        if coord is None:
+            return
+        try:
+            value = int(call.data.get("max_intensity"))
+        except (TypeError, ValueError):
+            _LOGGER.error("max_intensity must be an integer")
+            return
+        if not 6 <= value <= 32:
+            _LOGGER.error("max_intensity must be between 6 and 32")
+            return
+        await async_set_max_intensity(hass, coord.ip_address, value)
+
+    async def _svc_set_intensity(call: ServiceCall):
+        coord = _first_coordinator(hass)
+        if coord is None:
+            return
+        try:
+            value = int(call.data.get("intensity"))
+        except (TypeError, ValueError):
+            _LOGGER.error("intensity must be an integer")
+            return
+        if not 6 <= value <= 32:
+            _LOGGER.error("intensity must be between 6 and 32")
+            return
+        await async_set_intensity(hass, coord.ip_address, value)
+
+    async def _svc_set_dynamic_power_mode(call: ServiceCall):
+        coord = _first_coordinator(hass)
+        if coord is None:
+            return
+        try:
+            value = int(call.data.get("DynamicPowerMode"))
+        except (TypeError, ValueError):
+            _LOGGER.error("DynamicPowerMode must be an integer")
+            return
+        if not 0 <= value <= 5:
+            _LOGGER.error("DynamicPowerMode must be between 0 and 5")
+            return
+        # NB: call the module-level HTTP helper, not the service handler.
+        await async_set_dynamic_power_mode(hass, coord.ip_address, value)
+
+    # Legacy "_slider" variants — same handler, different parameter name.
+    async def _svc_set_min_intensity_slider(call: ServiceCall):
+        coord = _first_coordinator(hass)
+        if coord is None:
+            return
+        try:
+            value = int(call.data.get("v2c_min_intensity"))
+        except (TypeError, ValueError):
+            return
+        if not 6 <= value <= 32:
+            return
+        await async_set_min_intensity(hass, coord.ip_address, value)
+
+    async def _svc_set_max_intensity_slider(call: ServiceCall):
+        coord = _first_coordinator(hass)
+        if coord is None:
+            return
+        try:
+            value = int(call.data.get("v2c_max_intensity"))
+        except (TypeError, ValueError):
+            return
+        if not 6 <= value <= 32:
+            return
+        await async_set_max_intensity(hass, coord.ip_address, value)
+
+    async def _svc_set_dynamic_power_mode_slider(call: ServiceCall):
+        coord = _first_coordinator(hass)
+        if coord is None:
+            return
+        try:
+            value = int(call.data.get("v2c_dynamic_power_mode"))
+        except (TypeError, ValueError):
+            return
+        if not 0 <= value <= 5:
+            return
+        await async_set_dynamic_power_mode(hass, coord.ip_address, value)
+
+    hass.services.async_register(DOMAIN, "set_min_intensity", _svc_set_min_intensity)
+    hass.services.async_register(DOMAIN, "set_max_intensity", _svc_set_max_intensity)
+    hass.services.async_register(DOMAIN, "set_intensity", _svc_set_intensity)
+    hass.services.async_register(DOMAIN, "set_dynamic_power_mode", _svc_set_dynamic_power_mode)
+    hass.services.async_register(DOMAIN, "set_min_intensity_slider", _svc_set_min_intensity_slider)
+    hass.services.async_register(DOMAIN, "set_max_intensity_slider", _svc_set_max_intensity_slider)
+    hass.services.async_register(DOMAIN, "set_dynamic_power_mode_slider", _svc_set_dynamic_power_mode_slider)
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
-    
+
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
-        
+
+        # When the last entry is gone, remove our services.
+        if not hass.data[DOMAIN]:
+            for name in _SERVICE_NAMES:
+                if hass.services.has_service(DOMAIN, name):
+                    hass.services.async_remove(DOMAIN, name)
+
     return unload_ok
 
 async def async_set_min_intensity(hass: HomeAssistant, ip_address: str, min_intensity: int):

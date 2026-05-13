@@ -157,8 +157,6 @@ ENTITY_CATEGORY_MAP = {
     "SignalStatus": EntityCategory.DIAGNOSTIC      # Diagnostic information
 }
 
-UPDATE_INTERVAL = timedelta(minutes=1)
-
 async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entities):
     """Set up V2C Trydan sensors from a config entry."""
     ip_address = config_entry.data[CONF_IP_ADDRESS]

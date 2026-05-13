@@ -122,6 +122,12 @@
       }
     },
     "binary_sensor": {
+      "plugged": {
+        "name": "Branché"
+      },
+      "charging_session": {
+        "name": "Session en cours"
+      },
       "charging_active": {
         "name": "Charge en cours"
       }
@@ -158,9 +164,6 @@
       },
       "intensity": {
         "name": "Intensité de Charge"
-      },
-      "km_to_charge": {
-        "name": "Kilomètres à Charger"
       },
       "max_price": {
         "name": "Prix Maximum"

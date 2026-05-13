@@ -1,0 +1,61 @@
+set_min_intensity:
+  name: Set minimum intensity
+  description: Set the minimum charging intensity (A).
+  fields:
+    min_intensity:
+      name: Min intensity
+      description: Value between 6 and 32 A.
+      example: 6
+      required: true
+      selector:
+        number:
+          min: 6
+          max: 32
+          unit_of_measurement: A
+
+set_max_intensity:
+  name: Set maximum intensity
+  description: Set the maximum charging intensity (A).
+  fields:
+    max_intensity:
+      name: Max intensity
+      description: Value between 6 and 32 A.
+      example: 32
+      required: true
+      selector:
+        number:
+          min: 6
+          max: 32
+          unit_of_measurement: A
+
+set_intensity:
+  name: Set intensity
+  description: Set the charging intensity (A).
+  fields:
+    intensity:
+      name: Intensity
+      description: Value between 6 and 32 A.
+      example: 16
+      required: true
+      selector:
+        number:
+          min: 6
+          max: 32
+          unit_of_measurement: A
+
+set_dynamic_power_mode:
+  name: Set dynamic power mode
+  description: >
+    Set the dynamic power mode.
+    0=Timed enabled, 1=Timed disabled, 2=PV exclusive,
+    3=Min power, 4=Grid+FV, 5=Stop.
+  fields:
+    DynamicPowerMode:
+      name: Mode
+      description: Mode value between 0 and 5.
+      example: 2
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 5
