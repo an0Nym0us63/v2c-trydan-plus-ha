@@ -184,6 +184,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entitie
         ]
         sensors.append(ChargeKmSensor(coordinator, ip_address, kwh_per_100km))
         sensors.append(NumericalStatus(coordinator, ip_address))
+        sensors.append(StatusSensor(coordinator, ip_address))
 
         # Add PVPC price sensor if configured
         precio_luz_entity_id = config_entry.options.get(CONF_PRECIO_LUZ)
@@ -390,6 +391,129 @@ class NumericalStatus(CoordinatorEntity, SensorEntity):
     @property
     def state_class(self):
         return SensorStateClass.MEASUREMENT
+
+# DynamicPowerMode values needed for the composite status
+_MODE_PV_EXCLUSIVE = 2
+_MODE_STOP = 5
+
+# Statuts composites — ordre = priorité d'évaluation
+STATUS_OPTIONS = [
+    "error",
+    "fault",
+    "ventilation_required",
+    "locked",
+    "unplugged",
+    "paused",
+    "charging",
+    "waiting_solar",
+    "stop_mode",
+    "session_waiting",
+    "connected",
+    "unknown",
+]
+
+STATUS_ICONS = {
+    "error":                "mdi:alert-octagon",
+    "fault":                "mdi:alert-circle",
+    "ventilation_required": "mdi:fan",
+    "locked":               "mdi:lock",
+    "unplugged":            "mdi:power-plug-off",
+    "paused":               "mdi:pause-circle",
+    "charging":             "mdi:flash",
+    "waiting_solar":        "mdi:weather-sunny",
+    "stop_mode":            "mdi:stop-circle-outline",
+    "session_waiting":      "mdi:timer-sand",
+    "connected":            "mdi:power-plug",
+    "unknown":              "mdi:help-circle-outline",
+}
+
+
+class StatusSensor(CoordinatorEntity, SensorEntity):
+    """Statut composite — fusionne ChargeState, ChargePower, Paused, Locked, DynamicPowerMode."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "status"
+    _attr_device_class = SensorDeviceClass.ENUM
+
+    def __init__(self, coordinator, ip_address):
+        super().__init__(coordinator)
+        self._ip_address = ip_address
+
+    @property
+    def unique_id(self):
+        return f"{self._ip_address}_status"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self._ip_address)},
+            name=f"V2C Trydan ({self._ip_address})",
+            manufacturer="V2C",
+            model="Trydan",
+            configuration_url=f"http://{self._ip_address}",
+        )
+
+    @property
+    def options(self):
+        return STATUS_OPTIONS
+
+    @property
+    def icon(self):
+        return STATUS_ICONS.get(self.native_value, "mdi:help-circle-outline")
+
+    @property
+    def native_value(self):
+        data = self.coordinator.data
+        if not data:
+            return None
+
+        charge_state = data.get("ChargeState")
+        try:
+            charge_power = float(data.get("ChargePower", 0) or 0)
+        except (ValueError, TypeError):
+            charge_power = 0
+        paused = bool(data.get("Paused"))
+        locked = bool(data.get("Locked"))
+        mode = data.get("DynamicPowerMode")
+
+        # Priorité 1-3 : erreurs hardware (gagnent toujours)
+        if charge_state == 5:
+            return "error"
+        if charge_state == 4:
+            return "fault"
+        if charge_state == 6:
+            return "ventilation_required"
+
+        # Priorité 4 : verrouillage
+        if locked:
+            return "locked"
+
+        # Priorité 5 : débranché
+        if charge_state == 0:
+            return "unplugged"
+
+        # Priorité 6 : pause manuelle
+        if paused:
+            return "paused"
+
+        # Priorité 7 : courant qui passe réellement
+        if charge_power > 0:
+            return "charging"
+
+        # Priorité 8-10 : session ouverte mais 0 W → on précise le contexte
+        if charge_state == 2:
+            if mode == _MODE_PV_EXCLUSIVE:
+                return "waiting_solar"
+            if mode == _MODE_STOP:
+                return "stop_mode"
+            return "session_waiting"
+
+        # Priorité 11 : juste branché (état 1)
+        if charge_state == 1:
+            return "connected"
+
+        return "unknown"
+
 
 class PrecioLuzEntity(CoordinatorEntity, SensorEntity):
     """Representation of a V2C Trydan price sensor."""

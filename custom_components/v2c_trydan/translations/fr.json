@@ -119,6 +119,23 @@
       },
       "id": {
         "name": "ID de l'Appareil"
+      },
+      "status": {
+        "name": "Statut",
+        "state": {
+          "error": "Erreur (terre)",
+          "fault": "Défaut système",
+          "ventilation_required": "Ventilation requise",
+          "locked": "Verrouillé",
+          "unplugged": "Débranché",
+          "paused": "Pause manuelle",
+          "charging": "En charge",
+          "waiting_solar": "Attente surplus PV",
+          "stop_mode": "En mode arrêt",
+          "session_waiting": "Session en attente",
+          "connected": "Branché, prêt",
+          "unknown": "Inconnu"
+        }
       }
     },
     "binary_sensor": {
