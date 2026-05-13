@@ -15,24 +15,29 @@ _LOGGER = logging.getLogger(__name__)
 
 def arreglar_json_invalido(json_str: str) -> dict:
     """Fix malformed JSON responses from V2C Trydan devices.
-    
-    Handles common issues:
-    - Duplicated FirmwareVersion fields
-    - Missing quotes on version numbers
-    - Malformed structure
+
+    Known firmware issues handled here:
+    - Duplicated FirmwareVersion fields → keep only the last
+    - Version numbers émis sans guillemets après FirmwareVersion (ex: 1.6.13)
+    - Champ "ReadyState" collé sans virgule séparatrice
     """
     # Remove duplicate FirmwareVersion fields (keep the last one)
     firmware_pattern = r'"FirmwareVersion":"[^"]*",'
     matches = list(re.finditer(firmware_pattern, json_str))
     if len(matches) > 1:
-        # Remove all but the last occurrence
         for match in matches[:-1]:
             json_str = json_str[:match.start()] + json_str[match.end():]
-    
-    # Fix version numbers without quotes
-    cadena = json_str.replace("1.6.13", "\"1.6.13\"")
-    json_str_arreglado = cadena.replace("\"ReadyState\":", ",\"ReadyState\":")
-    
+
+    # Fix any version number emitted without quotes (e.g. "FirmwareVersion":1.6.13,)
+    json_str = re.sub(
+        r'("FirmwareVersion":)(\d+\.\d+\.\d+)',
+        r'\1"\2"',
+        json_str,
+    )
+
+    # Re-add comma before ReadyState if missing
+    json_str_arreglado = json_str.replace("\"ReadyState\":", ",\"ReadyState\":")
+
     try:
         return json.loads(json_str_arreglado)
     except json.JSONDecodeError as e:
@@ -43,14 +48,13 @@ class V2CtrydanDataUpdateCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, ip_address):
         self.ip_address = ip_address
         self.error_reportado = False
-        self._session = None
         self._consecutive_errors = 0
         self.MAX_CONSECUTIVE_ERRORS = 5
 
         super().__init__(
-            hass, 
-            _LOGGER, 
-            name="v2c_trydan_plus", 
+            hass,
+            _LOGGER,
+            name="v2c_trydan",
             update_interval=timedelta(seconds=5),
             always_update=False
         )
@@ -58,10 +62,8 @@ class V2CtrydanDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Fetch data from API."""
         try:
-            if self._session is None:
-                self._session = async_get_clientsession(self.hass)
-            
-            data = await self._async_get_json(self._session, f"http://{self.ip_address}/RealTimeData")
+            session = async_get_clientsession(self.hass)
+            data = await self._async_get_json(session, f"http://{self.ip_address}/RealTimeData")
             
             # Reset error tracking on successful update
             if self.error_reportado or self._consecutive_errors > 0:

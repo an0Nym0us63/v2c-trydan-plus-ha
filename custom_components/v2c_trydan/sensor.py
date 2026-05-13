@@ -1,54 +1,23 @@
 import logging
-import asyncio
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime
 
-import aiohttp
-import re
-import async_timeout
-import voluptuous as vol
-
-from homeassistant.const import (
-    CONF_NAME,
-    STATE_UNKNOWN,
-    CONF_IP_ADDRESS,
-)
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import CONF_IP_ADDRESS
+from homeassistant.core import HomeAssistant
 from homeassistant.components.sensor import (
-    PLATFORM_SCHEMA,
     SensorEntity,
     SensorDeviceClass,
     SensorStateClass,
 )
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
-from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers import entity_registry
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.entity import Entity
-from homeassistant.helpers.event import (
-    async_track_time_interval,
-    async_track_state_change_event,
-    async_call_later,
-)
-from homeassistant.helpers.update_coordinator import (
-    CoordinatorEntity,
-    DataUpdateCoordinator,
-    UpdateFailed,
-)
+from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, CONF_KWH_PER_100KM, CONF_PRECIO_LUZ
 from .coordinator import V2CtrydanDataUpdateCoordinator
-from .number import KmToChargeNumber
-
-DEPENDENCIES = ["switch"]
 
 _LOGGER = logging.getLogger(__name__)
-
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_IP_ADDRESS): str,
-    }
-)
 
 DEVICE_CLASS_MAP = {
     "ChargePower": SensorDeviceClass.POWER,
@@ -111,23 +80,14 @@ TRANSLATION_KEY_MAP = {
 STATE_CLASS_MAP = {
     "ChargeEnergy": "total_increasing",
     "ChargePower": "measurement",
-    "HousePower": "measurement", 
+    "HousePower": "measurement",
     "FVPower": "measurement",
     "BatteryPower": "measurement",
     "Intensity": "measurement",
     "MinIntensity": "measurement",
     "MaxIntensity": "measurement",
-    "ReadyState": "measurement",
     "ContractedPower": "measurement",
-    "Timer": "measurement",
-    "Dynamic": "measurement",
-    "DynamicPowerMode": "measurement",
-    "Locked": "measurement",
-    "Paused": "measurement",
-    "PauseDynamic": "measurement",
-    "SlaveError": "measurement",
     "VoltageInstallation": "measurement",
-    "SignalStatus": "measurement"
 }
 
 NATIVE_UNIT_MAP = {
@@ -158,13 +118,32 @@ NATIVE_UNIT_MAP = {
     "ID": None
 }
 
+# ChargeState raw value (V2C API) → state key used by HA (translated via fr.json)
+# Spec V2C: 0=STATE A (waiting EV), 1=STATE B (connected), 2=STATE C (charging),
+#           4=STATE F (system fail/leak), 5=STATE E (CP error / ground fail),
+#           6=STATE D (ventilation required). Pas de 3.
+CHARGE_STATE_MAP = {
+    0: "waiting",
+    1: "connected",
+    2: "charging",
+    4: "fault",
+    5: "error",
+    6: "ventilation_required",
+}
+
 # Options for ENUM sensors
 SENSOR_OPTIONS_MAP = {
-    "ChargeState": [
-        "Manguera no conectada",
-        "Manguera conectada (NO CARGA)",
-        "Manguera conectada (CARGANDO)"
-    ]
+    "ChargeState": list(CHARGE_STATE_MAP.values()),
+}
+
+# Icône dynamique par état pour le sensor ChargeState
+CHARGE_STATE_ICONS = {
+    "waiting":              "mdi:ev-plug-type2",
+    "connected":            "mdi:car-connected",
+    "charging":             "mdi:flash",
+    "fault":                "mdi:alert-circle",
+    "error":                "mdi:alert-octagon",
+    "ventilation_required": "mdi:fan",
 }
 
 # Entity categories for diagnostic sensors
@@ -230,28 +209,21 @@ class V2CtrydanSensor(CoordinatorEntity, SensorEntity):
         self._data_key = data_key
         self._kwh_per_100km = kwh_per_100km
         self._config_entry_id = config_entry_id
-        self.imax_old = 0
-        self.imin_old = 0
-        self.i_old = 0
-        self.carga_previo = 0
-        self._last_reset = None
         self._attr_has_entity_name = True
         # Set translation key if available
         self._attr_translation_key = TRANSLATION_KEY_MAP.get(data_key)
 
     @property
-    def last_reset(self):
-        if self.state_class == "total":
-            if self.state == 0:
-                self._last_reset = datetime.now(timezone.utc)
-            return self._last_reset
-        return None
-
-    @property
     def unique_id(self):
         return f"{self._ip_address}_{self._data_key}"
 
-        
+    @property
+    def icon(self):
+        """Icône dynamique pour ChargeState selon l'état courant."""
+        if self._data_key == "ChargeState":
+            return CHARGE_STATE_ICONS.get(self.native_value)
+        return None
+
     @property
     def device_info(self) -> DeviceInfo:
         """Return device information for this entity."""
@@ -293,94 +265,21 @@ class V2CtrydanSensor(CoordinatorEntity, SensorEntity):
         """Return the entity category for diagnostic sensors."""
         return ENTITY_CATEGORY_MAP.get(self._data_key)
 
-    async def update_min_intensity(self, value):
-        #_LOGGER.debug(f"Entity MinIntensity value")
-        if self.imin_old != value:
-            #_LOGGER.debug(f"Entity MinIntensity changed from {self.imin_old} to {value}")
-            if self.hass.states.get("number.v2c_min_intensity") is not None:
-                #_LOGGER.debug(f"Entity MinIntensity update 1000")
-                await self.hass.services.async_call(
-                    "number",
-                    "set_value",
-                    {"entity_id": "number.v2c_min_intensity", "value": float(value)},
-                )
-                self.imin_old = value
-
-    async def update_max_intensity(self, value):
-        if self.imax_old != value:
-            if self.hass.states.get("number.v2c_max_intensity") is not None:
-                await self.hass.services.async_call(
-                    "number",
-                    "set_value",
-                    {"entity_id": "number.v2c_max_intensity", "value": float(value)},
-                )
-                self.imax_old = value
-
-    async def update_intensity(self, value):
-        if self.i_old != value:
-            if self.hass.states.get("number.intensity") is not None:
-                await self.hass.services.async_call(
-                    "number",
-                    "set_value",
-                    {"entity_id": "number.intensity", "value": float(value)},
-                )
-                self.i_old = value
-
-    async def async_added_to_hass(self):
-        await super().async_added_to_hass()
-
-        if self.coordinator.data is None:
-            return
-            
-        if self._data_key == "MinIntensity" and self._data_key in self.coordinator.data:
-            self.hass.async_create_task(self.update_min_intensity(self.coordinator.data[self._data_key]))
-
-        if self._data_key == "MaxIntensity" and self._data_key in self.coordinator.data:
-            self.hass.async_create_task(self.update_max_intensity(self.coordinator.data[self._data_key]))
-
-        if self._data_key == "Intensity" and self._data_key in self.coordinator.data:
-            self.hass.async_create_task(self.update_intensity(self.coordinator.data[self._data_key]))
-
-        self.async_on_remove(self.coordinator.async_add_listener(self.update_numbers))
-
-    @callback
-    def update_numbers(self):
-        if self.coordinator.data is None:
-            return
-            
-        if self._data_key == "MinIntensity" and self._data_key in self.coordinator.data:
-            self.hass.async_create_task(self.update_min_intensity(self.coordinator.data[self._data_key]))
-
-        if self._data_key == "MaxIntensity" and self._data_key in self.coordinator.data:
-            self.hass.async_create_task(self.update_max_intensity(self.coordinator.data[self._data_key]))
-
-        if self._data_key == "Intensity" and self._data_key in self.coordinator.data:
-            self.hass.async_create_task(self.update_intensity(self.coordinator.data[self._data_key]))
-
-
     @property
     def native_value(self):
         """Return the state of the sensor."""
         if self.coordinator.data is None:
             return None
-            
+
         if self._data_key == "ChargeState":
             current = self.coordinator.data.get(self._data_key)
             if current is None:
                 return None
-            if current == 0:
-                self.carga_previo = 0
-                return "Manguera no conectada"
-            elif current == 1:
-                #if self.carga_previo == 2:
-                #    self.hass.bus.async_fire("v2c_trydan.charging_complete")
-                self.carga_previo = 1
-                return "Manguera conectada (NO CARGA)"
-            elif current == 2:
-                self.carga_previo = 2
-                return "Manguera conectada (CARGANDO)"
-            else:
-                return current
+            state_key = CHARGE_STATE_MAP.get(current)
+            if state_key is None:
+                _LOGGER.warning(f"Unknown ChargeState value: {current}")
+                return None
+            return state_key
         elif self._data_key == "ChargeTime":
             charge_time_seconds = self.coordinator.data.get("ChargeTime", 0)
             hours = charge_time_seconds // 3600
@@ -409,88 +308,16 @@ class V2CtrydanSensor(CoordinatorEntity, SensorEntity):
     def available(self):
         """Return if entity is available."""
         return self.coordinator.last_update_success and self.coordinator.data is not None
-        
-    @property
-    def device_class(self):
-        return DEVICE_CLASS_MAP.get(self._data_key)
-
-    @property
-    def native_unit_of_measurement(self):
-        return NATIVE_UNIT_MAP.get(self._data_key)
-
-    @property
-    def last_reset(self):
-        if self.state_class == "total":
-            return datetime.fromisoformat('2011-11-04')
-        return None
 
 
 class ChargeKmSensor(CoordinatorEntity, SensorEntity):
-    """Representation of a V2C Trydan charge km sensor."""
-    
+    """Distance estimée chargée (km) à partir de ChargeEnergy."""
+
     def __init__(self, coordinator, ip_address, kwh_per_100km):
-        """Initialize the sensor."""
         super().__init__(coordinator)
         self._ip_address = ip_address
         self._kwh_per_100km = kwh_per_100km
-        self._charging_paused = False
         self._attr_has_entity_name = True
-
-    async def handle_paused_state_change(self, event):
-        entity_id = event.data.get("entity_id")
-        old_state = event.data.get("old_state")
-        new_state = event.data.get("new_state")
-        
-        if new_state is not None and old_state is not None:
-            if new_state.state == "on" and old_state.state == "off":
-                #_LOGGER.debug("Charging paused")
-                await self.async_set_km_to_charge(0)
-                self._charging_paused = True
-            if new_state.state == "off" and old_state.state == "on":
-                #_LOGGER.debug("Charging unpaused")
-                self._charging_paused = False
-
-    async def handle_km_to_charge_state_change(self, event):
-        entity_id = event.data.get("entity_id")
-        
-        if entity_id == "number.v2c_km_to_charge":
-            old_state = event.data.get("old_state")
-            new_state = event.data.get("new_state")
-            #_LOGGER.debug(f"Entity {entity_id} changed from {old_state} to {new_state}")
-
-    async def async_set_km_to_charge(self, value):
-        await self.hass.services.async_call(
-            "number",
-            "set_value",
-            {"entity_id": "number.v2c_km_to_charge", "value": value},
-        )
-
-    async def async_added_to_hass(self):
-        await super().async_added_to_hass()
-        async_track_time_interval(self.hass, self.check_and_pause_charging, timedelta(seconds=10))
-        async_track_state_change_event(self.hass, ["switch.v2c_trydan_switch_paused"], self.handle_paused_state_change)
-        self.hass.bus.async_listen("state_changed", self.handle_km_to_charge_state_change)
-
-    async def check_and_pause_charging(self, now):
-        paused_switch = self.hass.states.get("switch.v2c_trydan_switch_paused")
-        if paused_switch is not None and paused_switch.state == "on":
-            return
-
-        km_to_charge = self.hass.states.get("number.v2c_km_to_charge")
-        if km_to_charge is not None:
-            try:
-                try:
-                    km_to_charge_float = float(km_to_charge.state)
-                except ValueError:
-                    km_to_charge_float = -1.0
-
-                if self.state >= km_to_charge_float and km_to_charge_float != 0:
-                    await self.hass.services.async_call("switch", "turn_on", {"entity_id": "switch.v2c_trydan_switch_paused"})
-                    await self.hass.services.async_call("switch", "turn_on", {"entity_id": "switch.v2c_trydan_switch_locked"})
-                    await self.async_set_km_to_charge(0)
-                    self.hass.bus.async_fire("v2c_trydan.charging_complete")
-            except Exception as e:
-                _LOGGER.error(f"Error en carga de kilometros el valor esperado es: {km_to_charge.state} y el error {e}")
 
     @property
     def unique_id(self):
@@ -540,7 +367,7 @@ class NumericalStatus(CoordinatorEntity, SensorEntity):
 
     @property
     def unique_id(self):
-        return "NumericalStatus"
+        return f"{self._ip_address}_NumericalStatus"
 
     @property
     def name(self):
@@ -559,16 +386,8 @@ class NumericalStatus(CoordinatorEntity, SensorEntity):
 
     @property
     def native_value(self):
-        Charge_State = self.coordinator.data.get("ChargeState", "0")      
-        if Charge_State == "Manguera no conectada":
-            return 0
-        elif Charge_State == "Manguera conectada (NO CARGA)":
-            return 1
-        elif Charge_State == "Manguera conectada (CARGANDO)":
-            return 2
-        else:
-            return Charge_State  
-        return -1
+        """Return the raw ChargeState int from the V2C API (0-6, no 3)."""
+        return self.coordinator.data.get("ChargeState")
 
     @property
     def state_class(self):
@@ -590,7 +409,7 @@ class PrecioLuzEntity(CoordinatorEntity, SensorEntity):
 
     @property
     def unique_id(self):
-        return f"v2c_precio_luz_entity"
+        return f"{self.ip_address}_precio_luz"
 
     @property
     def name(self):
@@ -642,8 +461,8 @@ class PrecioLuzEntity(CoordinatorEntity, SensorEntity):
     async def async_added_to_hass(self):
         """Register update callback when added to hass."""
         paused_switch_id = f"{self.ip_address}_Paused"
-        v2c_carga_pvpc_switch_id = f"v2c_carga_pvpc"
-        max_price_entity_id = "v2c_MaxPrice"
+        v2c_carga_pvpc_switch_id = f"{self.ip_address}_carga_pvpc"
+        max_price_entity_id = f"{self.ip_address}_MaxPrice"
 
         async def find_entities():
             entity_registry_instance = entity_registry.async_get(self.hass)

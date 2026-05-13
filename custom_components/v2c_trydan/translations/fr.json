@@ -38,7 +38,15 @@
         "name": "Puissance de Charge"
       },
       "chargestate": {
-        "name": "État de Charge"
+        "name": "État de Charge",
+        "state": {
+          "waiting": "En attente",
+          "connected": "Branché",
+          "charging": "Session en cours",
+          "fault": "Défaut système",
+          "error": "Erreur (terre)",
+          "ventilation_required": "Ventilation requise"
+        }
       },
       "chargetime": {
         "name": "Temps de Charge"
@@ -113,6 +121,11 @@
         "name": "ID de l'Appareil"
       }
     },
+    "binary_sensor": {
+      "charging_active": {
+        "name": "Charge en cours"
+      }
+    },
     "switch": {
       "dynamic": {
         "name": "Charge Dynamique"
@@ -172,12 +185,12 @@
       "dynamic_power_mode": {
         "name": "Mode de Puissance Dynamique",
         "state": {
-          "enable_timed_power": "Activer la Puissance Temporisée",
-          "disable_timed_power": "Désactiver la Puissance Temporisée",
-          "disable_timed_power_exclusive": "Désactiver + Mode PV Exclusif",
-          "disable_timed_power_min": "Désactiver + Mode Puissance Minimum",
-          "disable_timed_power_grid_fv": "Désactiver + Mode Réseau+PV",
-          "disable_timed_power_stop": "Désactiver + Mode Arrêt"
+          "enable_timed_power": "Temporisée",
+          "disable_timed_power": "Non Temporisée",
+          "disable_timed_power_exclusive": "PV exclusif",
+          "disable_timed_power_min": "Mini Réseau + PV",
+          "disable_timed_power_grid_fv": "Max Réseau + PV",
+          "disable_timed_power_stop": "Arrêt"
         }
       }
     }

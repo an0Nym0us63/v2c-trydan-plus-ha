@@ -4,12 +4,13 @@ from homeassistant.const import DEVICE_DEFAULT_NAME, CONF_IP_ADDRESS
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 import logging
 import aiohttp
 import asyncio
 
-from . import DOMAIN
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,16 +20,17 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
     coordinator = hass.data[DOMAIN][config_entry.entry_id]
 
-    async_add_entities([MaxIntensityNumber(coordinator)])
-    async_add_entities([MinIntensityNumber(coordinator)])
-    async_add_entities([KmToChargeNumber(hass, ip_address)])
-    async_add_entities([IntensityNumber(coordinator)])
-    async_add_entities([MaxPrice(hass, ip_address)])
-    async_add_entities([ContractedPowerNumber(coordinator)])
-    async_add_entities([ContractedPowerSolaireNumber(hass, ip_address)])
-    async_add_entities([ContractedPowerReseauNumber(hass, ip_address)])
-    async_add_entities([LightLEDNumber(coordinator)])
-    async_add_entities([LogoLEDNumber(coordinator)])
+    async_add_entities([
+        MaxIntensityNumber(coordinator),
+        MinIntensityNumber(coordinator),
+        IntensityNumber(coordinator),
+        MaxPrice(hass, ip_address),
+        ContractedPowerNumber(coordinator),
+        ContractedPowerSolaireNumber(hass, ip_address),
+        ContractedPowerReseauNumber(hass, ip_address),
+        LightLEDNumber(coordinator),
+        LogoLEDNumber(coordinator),
+    ])
 
 
 async def _write_value(hass, ip_address: str, keyword: str, value) -> None:
@@ -63,14 +65,14 @@ class MaxIntensityNumber(CoordinatorEntity, NumberEntity):
         self._attr_translation_key = "max_intensity"
 
     @property
-    def unique_id(self): return "v2c_trydan_plus_max_intensity"
+    def unique_id(self): return "v2c_trydan_max_intensity"
 
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(identifiers={(DOMAIN, self._ip_address)}, name=f"V2C Trydan ({self._ip_address})", manufacturer="V2C", model="Trydan", configuration_url=f"http://{self._ip_address}")
 
     @property
-    def icon(self): return "mdi:car"
+    def icon(self): return "mdi:gauge-full"
 
     @property
     def native_unit_of_measurement(self): return "A"
@@ -111,14 +113,14 @@ class MinIntensityNumber(CoordinatorEntity, NumberEntity):
         self._attr_translation_key = "min_intensity"
 
     @property
-    def unique_id(self): return "v2c_trydan_plus_min_intensity"
+    def unique_id(self): return "v2c_trydan_min_intensity"
 
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(identifiers={(DOMAIN, self._ip_address)}, name=f"V2C Trydan ({self._ip_address})", manufacturer="V2C", model="Trydan", configuration_url=f"http://{self._ip_address}")
 
     @property
-    def icon(self): return "mdi:car"
+    def icon(self): return "mdi:gauge-low"
 
     @property
     def native_unit_of_measurement(self): return "A"
@@ -150,47 +152,6 @@ class MinIntensityNumber(CoordinatorEntity, NumberEntity):
             _LOGGER.error(f"v2c_min_intensity must be between {self.native_min_value} and {self.native_max_value}")
 
 
-class KmToChargeNumber(NumberEntity):
-    def __init__(self, hass, ip_address):
-        self._hass = hass
-        self._ip_address = ip_address
-        self._state = 0
-        self._attr_has_entity_name = True
-        self._attr_translation_key = "km_to_charge"
-
-    @property
-    def unique_id(self): return "v2c_trydan_plus_km_to_charge"
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        return DeviceInfo(identifiers={(DOMAIN, self._ip_address)}, name=f"V2C Trydan ({self._ip_address})", manufacturer="V2C", model="Trydan", configuration_url=f"http://{self._ip_address}")
-
-    @property
-    def icon(self): return "mdi:car"
-
-    @property
-    def native_unit_of_measurement(self): return "km"
-
-    @property
-    def native_value(self): return self._state
-
-    @property
-    def native_max_value(self): return 1000
-
-    @property
-    def native_min_value(self): return 0
-
-    @property
-    def state_class(self): return SensorStateClass.MEASUREMENT
-
-    async def async_set_native_value(self, value):
-        if 0 <= value <= 1000:
-            self._state = value
-            self.async_write_ha_state()
-        else:
-            _LOGGER.error("v2c_km_to_charge must be between 0 and 1000")
-
-
 class IntensityNumber(CoordinatorEntity, NumberEntity):
     def __init__(self, coordinator):
         super().__init__(coordinator)
@@ -200,14 +161,14 @@ class IntensityNumber(CoordinatorEntity, NumberEntity):
         self._attr_translation_key = "intensity"
 
     @property
-    def unique_id(self): return "v2c_trydan_plus_intensity"
+    def unique_id(self): return "v2c_trydan_intensity"
 
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(identifiers={(DOMAIN, self._ip_address)}, name=f"V2C Trydan ({self._ip_address})", manufacturer="V2C", model="Trydan", configuration_url=f"http://{self._ip_address}")
 
     @property
-    def icon(self): return "mdi:car"
+    def icon(self): return "mdi:current-ac"
 
     @property
     def native_unit_of_measurement(self): return "A"
@@ -242,7 +203,7 @@ class IntensityNumber(CoordinatorEntity, NumberEntity):
             _LOGGER.error(f"v2c_intensity must be between {self.native_min_value} and {self.native_max_value}")
 
 
-class MaxPrice(NumberEntity):
+class MaxPrice(NumberEntity, RestoreEntity):
     def __init__(self, hass, ip_address):
         self._hass = hass
         self._ip_address = ip_address
@@ -251,7 +212,7 @@ class MaxPrice(NumberEntity):
         self._attr_translation_key = "max_price"
 
     @property
-    def unique_id(self): return "v2c_trydan_plus_MaxPrice"
+    def unique_id(self): return f"{self._ip_address}_MaxPrice"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -274,6 +235,15 @@ class MaxPrice(NumberEntity):
 
     @property
     def state_class(self): return SensorStateClass.MEASUREMENT
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
+            try:
+                self._state = float(last_state.state)
+            except (ValueError, TypeError):
+                pass
 
     async def async_set_native_value(self, value):
         if 0 <= value <= 1.0:
@@ -298,14 +268,14 @@ class ContractedPowerNumber(CoordinatorEntity, NumberEntity):
         self._attr_translation_key = "contracted_power"
 
     @property
-    def unique_id(self): return "v2c_trydan_plus_contracted_power"
+    def unique_id(self): return "v2c_trydan_contracted_power"
 
     @property
     def device_info(self) -> DeviceInfo:
         return DeviceInfo(identifiers={(DOMAIN, self._ip_address)}, name=f"V2C Trydan ({self._ip_address})", manufacturer="V2C", model="Trydan", configuration_url=f"http://{self._ip_address}")
 
     @property
-    def icon(self): return "mdi:transmission-tower"
+    def icon(self): return "mdi:flash"
 
     @property
     def native_unit_of_measurement(self): return "W"
@@ -338,7 +308,7 @@ class ContractedPowerNumber(CoordinatorEntity, NumberEntity):
         await self._coordinator.async_request_refresh()
 
 
-class ContractedPowerSolaireNumber(NumberEntity):
+class ContractedPowerSolaireNumber(NumberEntity, RestoreEntity):
     """Local param: ContractedPower value to send when PV exclusive mode is selected (negative = export limit)."""
 
     def __init__(self, hass, ip_address):
@@ -349,7 +319,7 @@ class ContractedPowerSolaireNumber(NumberEntity):
         self._attr_translation_key = "contracted_power_solaire"
 
     @property
-    def unique_id(self): return "v2c_trydan_plus_contracted_power_solaire"
+    def unique_id(self): return "v2c_trydan_contracted_power_solaire"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -378,12 +348,21 @@ class ContractedPowerSolaireNumber(NumberEntity):
     @property
     def native_step(self): return 100
 
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
+            try:
+                self._state = int(float(last_state.state))
+            except (ValueError, TypeError):
+                pass
+
     async def async_set_native_value(self, value):
         self._state = int(value)
         self.async_write_ha_state()
 
 
-class ContractedPowerReseauNumber(NumberEntity):
+class ContractedPowerReseauNumber(NumberEntity, RestoreEntity):
     """Local param: ContractedPower value to send when grid modes are selected."""
 
     def __init__(self, hass, ip_address):
@@ -394,7 +373,7 @@ class ContractedPowerReseauNumber(NumberEntity):
         self._attr_translation_key = "contracted_power_reseau"
 
     @property
-    def unique_id(self): return "v2c_trydan_plus_contracted_power_reseau"
+    def unique_id(self): return "v2c_trydan_contracted_power_reseau"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -423,12 +402,21 @@ class ContractedPowerReseauNumber(NumberEntity):
     @property
     def native_step(self): return 100
 
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
+            try:
+                self._state = int(float(last_state.state))
+            except (ValueError, TypeError):
+                pass
+
     async def async_set_native_value(self, value):
         self._state = int(value)
         self.async_write_ha_state()
 
 
-class LightLEDNumber(CoordinatorEntity, NumberEntity):
+class LightLEDNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
     """LED light intensity (0-100%). State is local — not in RealTimeData."""
 
     def __init__(self, coordinator):
@@ -440,7 +428,7 @@ class LightLEDNumber(CoordinatorEntity, NumberEntity):
         self._local_value = 100
 
     @property
-    def unique_id(self): return "v2c_trydan_plus_light_led"
+    def unique_id(self): return "v2c_trydan_light_led"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -464,6 +452,15 @@ class LightLEDNumber(CoordinatorEntity, NumberEntity):
     @property
     def native_step(self): return 1
 
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
+            try:
+                self._local_value = int(float(last_state.state))
+            except (ValueError, TypeError):
+                pass
+
     async def async_set_native_value(self, value):
         int_value = int(value)
         await _write_value(self.hass, self._ip_address, "LightLED", int_value)
@@ -471,7 +468,7 @@ class LightLEDNumber(CoordinatorEntity, NumberEntity):
         self.async_write_ha_state()
 
 
-class LogoLEDNumber(CoordinatorEntity, NumberEntity):
+class LogoLEDNumber(CoordinatorEntity, NumberEntity, RestoreEntity):
     """Logo LED intensity (0-100%). State is local — not in RealTimeData."""
 
     def __init__(self, coordinator):
@@ -483,7 +480,7 @@ class LogoLEDNumber(CoordinatorEntity, NumberEntity):
         self._local_value = 100
 
     @property
-    def unique_id(self): return "v2c_trydan_plus_logo_led"
+    def unique_id(self): return "v2c_trydan_logo_led"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -506,6 +503,15 @@ class LogoLEDNumber(CoordinatorEntity, NumberEntity):
 
     @property
     def native_step(self): return 1
+
+    async def async_added_to_hass(self):
+        await super().async_added_to_hass()
+        last_state = await self.async_get_last_state()
+        if last_state and last_state.state not in (None, "unknown", "unavailable"):
+            try:
+                self._local_value = int(float(last_state.state))
+            except (ValueError, TypeError):
+                pass
 
     async def async_set_native_value(self, value):
         int_value = int(value)

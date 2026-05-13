@@ -24,9 +24,19 @@ DYNAMIC_POWER_MODE_OPTIONS = [
 
 # Mapping mode → unique_id du number à utiliser (None = ne rien envoyer)
 CONTRACTED_POWER_MAP = {
-    "disable_timed_power_exclusive": "v2c_trydan_plus_contracted_power_solaire",
-    "disable_timed_power_min":       "v2c_trydan_plus_contracted_power_reseau",
-    "disable_timed_power_grid_fv":   "v2c_trydan_plus_contracted_power_reseau",
+    "disable_timed_power_exclusive": "v2c_trydan_contracted_power_solaire",
+    "disable_timed_power_min":       "v2c_trydan_contracted_power_reseau",
+    "disable_timed_power_grid_fv":   "v2c_trydan_contracted_power_reseau",
+}
+
+# Mapping mode → icône MDI
+DYNAMIC_POWER_MODE_ICONS = {
+    "enable_timed_power":             "mdi:timer-outline",
+    "disable_timed_power":            "mdi:timer-off-outline",
+    "disable_timed_power_exclusive":  "mdi:solar-power-variant",
+    "disable_timed_power_min":        "mdi:transmission-tower-import",
+    "disable_timed_power_grid_fv":    "mdi:transmission-tower",
+    "disable_timed_power_stop":       "mdi:stop-circle-outline",
 }
 
 
@@ -105,7 +115,7 @@ class DynamicPowerModeSelect(SelectEntity):
 
     @property
     def unique_id(self):
-        return "v2c_trydan_plus_dynamic_power_mode_select"
+        return "v2c_trydan_dynamic_power_mode_select"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -119,7 +129,7 @@ class DynamicPowerModeSelect(SelectEntity):
 
     @property
     def icon(self):
-        return "mdi:cog"
+        return DYNAMIC_POWER_MODE_ICONS.get(self._current_option, "mdi:cog")
 
     @property
     def current_option(self):

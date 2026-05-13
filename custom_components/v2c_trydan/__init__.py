@@ -7,13 +7,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import logging
 import aiohttp
 
+from .const import DOMAIN
 from .coordinator import V2CtrydanDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "v2c_trydan_plus"
-
-PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.SELECT]
+PLATFORMS = [Platform.SENSOR, Platform.SWITCH, Platform.NUMBER, Platform.SELECT, Platform.BINARY_SENSOR]
 
 # Configuration schema - this integration is config entry only
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -78,11 +77,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         dynamic_power_mode = call.data.get("DynamicPowerMode")
         try:
             dynamic_power_mode = int(dynamic_power_mode)
-            if 0 <= dynamic_power_mode <= 7:
+            if 0 <= dynamic_power_mode <= 5:
                 #_LOGGER.debug(f"Valid dynamic_power_mode: {dynamic_power_mode}")
                 await async_set_dynamic_power_mode(hass, coordinator.ip_address, dynamic_power_mode)
             else:
-                _LOGGER.error("DynamicPowerMode must be between 0 and 7")
+                _LOGGER.error("DynamicPowerMode must be between 0 and 5")
         except ValueError:
             _LOGGER.error(f"Invalid dynamic_power_mode: {dynamic_power_mode}. Must be an integer.")
 
@@ -136,7 +135,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if dynamic_power_mode is not None:
             try:
                 dynamic_power_mode = int(dynamic_power_mode)
-                if 0 <= dynamic_power_mode <= 7:
+                if 0 <= dynamic_power_mode <= 5:
                     if entry:
                         ip_address = coordinator.ip_address
                         #_LOGGER.debug(f"Calling async_set_dynamic_power_mode with IP: {ip_address} and dynamic_power_mode: {dynamic_power_mode}")
@@ -144,7 +143,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     else:
                         _LOGGER.error("Entry data not found for setting dynamic_power_mode_slider")
                 else:
-                    _LOGGER.error("v2c_dynamic_power_mode must be between 0 y 7")
+                    _LOGGER.error("v2c_dynamic_power_mode must be between 0 and 5")
             except ValueError:
                 _LOGGER.error(f"Invalid v2c_dynamic_power_mode: {dynamic_power_mode}. Must be an integer.")
         else:

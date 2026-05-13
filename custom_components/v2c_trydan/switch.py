@@ -1,12 +1,12 @@
 import logging
 import aiohttp
-import voluptuous as vol
 
-from homeassistant.components.switch import PLATFORM_SCHEMA, SwitchEntity
+from homeassistant.components.switch import SwitchEntity
 from homeassistant.const import CONF_IP_ADDRESS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import V2CtrydanDataUpdateCoordinator
@@ -22,12 +22,6 @@ SWITCH_TRANSLATION_KEY_MAP = {
     "Timer": "timer",
     "PauseDynamic": "pause_dynamic",
 }
-
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
-    {
-        vol.Required(CONF_IP_ADDRESS): str,
-    }
-)
 
 async def async_setup_entry(hass: HomeAssistant, config_entry, async_add_entities):
     ip_address = config_entry.data[CONF_IP_ADDRESS]
@@ -127,7 +121,7 @@ class V2CtrydanSwitch(CoordinatorEntity, SwitchEntity):
             raise
 
 
-class V2CCargaPVPCSwitch(SwitchEntity):
+class V2CCargaPVPCSwitch(SwitchEntity, RestoreEntity):
     def __init__(self, precio_luz_entity, ip_address):
         self._is_on = False
         self.precio_luz_entity = precio_luz_entity
@@ -139,7 +133,7 @@ class V2CCargaPVPCSwitch(SwitchEntity):
 
     @property
     def unique_id(self):
-        return f"v2c_carga_pvpc"
+        return f"{self._ip_address}_carga_pvpc"
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -181,8 +175,12 @@ class V2CCargaPVPCSwitch(SwitchEntity):
 
     async def async_added_to_hass(self):
         await super().async_added_to_hass()
+        # Restore last on/off state across HA restarts
+        last_state = await self.async_get_last_state()
+        if last_state is not None:
+            self._is_on = last_state.state == "on"
         if self.precio_luz_entity is None:
             self.precio_luz_entity = self.hass.states.get(self._precio_luz_entity_id)
             if self.precio_luz_entity is not None:
                 _LOGGER.info(f"PVPC entity {self._precio_luz_entity_id} found after being added to hass")
-                self.async_write_ha_state()
+        self.async_write_ha_state()
